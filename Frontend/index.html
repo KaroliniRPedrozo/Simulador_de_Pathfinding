@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <title>Cypher's Analytics - Comparativo de Algoritmos</title>
+    <style>
+        :root {
+            --bg: #05070a; 
+            --panel: #1e293b; 
+            --accent: #00ff41; /* A* - Ótimo */
+            --med-path: #f59e0b; /* Gulosa - Mediano */
+            --bad-path: #ef4444; /* DFS - Pior */
+            --text: #ffffff; 
+            --wall: #000000; 
+            --hazard: #8b5cf6; /* Alterado para roxo para não confundir com as rotas */
+            --floor: #334155; 
+            --agent: #ffffff;
+            --target: #facc15; 
+        }
+        body {
+            font-family: 'Consolas', monospace; background: var(--bg); color: var(--text);
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0;
+            padding-bottom: 30px;
+        }
+        .container { display: flex; gap: 20px; padding: 25px; background: var(--panel); border: 2px solid #334155; border-radius: 12px; margin-top: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .grid { display: grid; grid-template-columns: repeat(15, 38px); gap: 3px; background: #000; padding: 8px; border-radius: 4px; position: relative;}
+        .cell { width: 38px; height: 38px; border-radius: 4px; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: bold; transition: 0.1s; color: white; position: relative;}
+        
+        .wall { background: var(--wall); border: 1px solid #111; }
+        .floor { background: var(--floor); border: 1px solid rgba(255,255,255,0.05); }
+        .hazard { background: rgba(139, 92, 246, 0.3); color: #c4b5fd; box-shadow: inset 0 0 10px rgba(139, 92, 246, 0.5); border: 1px dashed var(--hazard);}
+        
+        .agent { background: var(--agent); border-radius: 50%; box-shadow: 0 0 20px var(--agent); z-index: 10; color: #000; }
+        .target { border: 4px solid var(--target); background: #000; box-shadow: 0 0 15px var(--target); z-index: 10; color: var(--target); }
+        
+        /* Estilos dos Caminhos sobrepostos */
+        .path { background: var(--accent); transform: scale(0.7); border-radius: 50%; box-shadow: 0 0 20px var(--accent); z-index: 8; position: absolute; width: 100%; height: 100%;}
+        .path-med { background: var(--med-path); transform: scale(0.5); border-radius: 50%; box-shadow: 0 0 10px var(--med-path); z-index: 6; position: absolute; width: 100%; height: 100%; opacity: 0.9;}
+        .path-long { background: var(--bad-path); transform: scale(0.3); border-radius: 50%; box-shadow: 0 0 10px var(--bad-path); opacity: 0.7; z-index: 4; position: absolute; width: 100%; height: 100%;}
+        
+        .sidebar { width: 350px; display: flex; flex-direction: column; gap: 12px; }
+        
+        /* Caixas de Dados UI/UX */
+        .stats-box { padding: 12px; border-radius: 8px; border: 1px solid; background: #0f172a;}
+        .stats-good { border-color: var(--accent); box-shadow: inset 0 0 15px rgba(0, 255, 65, 0.05); }
+        .stats-med { border-color: var(--med-path); box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.05); }
+        .stats-bad { border-color: var(--bad-path); box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.05); }
+        
+        .box-title { font-size: 0.85rem; text-transform: uppercase; margin-bottom: 8px; font-weight: bold; letter-spacing: 1px;}
+        .stat-item { margin-bottom: 4px; border-bottom: 1px solid #1e293b; padding-bottom: 4px; font-size: 0.85rem; color: #cbd5e1;}
+        .val { font-weight: bold; float: right; font-size: 1rem; }
+        .val-good { color: var(--accent); }
+        .val-med { color: var(--med-path); }
+        .val-bad { color: var(--bad-path); }
+        
+        .terminal { background: #000; height: 120px; padding: 10px; font-size: 11px; color: #00ff41; overflow-y: auto; border: 2px solid #334155; line-height: 1.4; }
+        
+        button { padding: 12px; background: #00ff41; border: none; color: #000; cursor: pointer; font-weight: bold; text-transform: uppercase; border-radius: 6px; letter-spacing: 1px; transition: 0.2s; }
+        button:hover { background: #00cc33; transform: scale(1.02); }
+        .btn-secondary { background: transparent; border: 1px solid #64748b; color: #64748b; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1 style="color: #fff; margin-top: 20px; letter-spacing: 3px; font-size: 1.5rem;">CYPHER'S ANALYTICS: BENCHMARK TÁTICO</h1>
+
+    <div class="container">
+        <div class="grid" id="grid"></div>
+
+        <div class="sidebar">
+            
+            <div class="stats-box stats-good">
+                <div class="box-title" style="color: var(--accent);">Rota Ótima (Algoritmo A*)</div>
+                <div class="stat-item">Passos Totais: <span class="val val-good" id="short-steps">--</span></div>
+                <div class="stat-item" style="border: none;">Custo do Terreno: <span class="val val-good" id="short-cost">--</span></div>
+            </div>
+
+            <div class="stats-box stats-med">
+                <div class="box-title" style="color: var(--med-path);">Rota Mediana (Busca Gulosa)</div>
+                <div class="stat-item">Passos Totais: <span class="val val-med" id="med-steps">--</span></div>
+                <div class="stat-item" style="border: none;">Custo do Terreno: <span class="val val-med" id="med-cost">--</span></div>
+            </div>
+
+            <div class="stats-box stats-bad">
+                <div class="box-title" style="color: var(--bad-path);">Pior Rota (Profundidade DFS)</div>
+                <div class="stat-item">Passos Totais: <span class="val val-bad" id="long-steps">--</span></div>
+                <div class="stat-item" style="border: none;">Custo do Terreno: <span class="val val-bad" id="long-cost">--</span></div>
+            </div>
+
+            <div class="terminal" id="term">> SISTEMA DE BENCHMARK PRONTO.</div>
+
+            <button onclick="iniciar()" id="btn-iniciar">EXECUTAR ANÁLISE COMPLETA</button>
+            <button class="btn-secondary" onclick="location.reload()">GERAR NOVA TOPOLOGIA</button>
+        </div>
+    </div>
+
+    <script>
+        const size = 15;
+        let grid = [];
+        let start = {x: 0, y: 0};
+        let target = {x: 0, y: 0};
+        const gridDiv = document.getElementById('grid');
+
+        // Sorteio de distâncias longas
+        start.x = Math.floor(Math.random() * size);
+        start.y = Math.floor(Math.random() * size);
+        
+        let distCalculada = 0;
+        do {
+            target.x = Math.floor(Math.random() * size);
+            target.y = Math.floor(Math.random() * size);
+            distCalculada = Math.abs(target.x - start.x) + Math.abs(target.y - start.y);
+        } while (distCalculada < 18);
+
+        // Renderização do Mapa na grelha
+        for(let y=0; y<size; y++) {
+            grid[y] = [];
+            for(let x=0; x<size; x++) {
+                let type = 'floor';
+                let rand = Math.random();
+                
+                if(x !== start.x || y !== start.y) {
+                    if(x !== target.x || y !== target.y) {
+                        if(rand < 0.25) type = 'wall';
+                        else if(rand < 0.35) type = 'hazard'; // Terreno com custo 5
+                    }
+                }
+                
+                if(x===start.x && y===start.y) type = 'start';
+                if(x===target.x && y===target.y) type = 'target';
+
+                grid[y][x] = type;
+                let cell = document.createElement('div');
+                cell.id = `c${x}-${y}`;
+                cell.className = `cell ${type === 'start' ? 'agent' : type === 'target' ? 'target' : type}`;
+                
+                if(type === 'hazard') cell.innerText = '5';
+                if(type === 'start') cell.innerText = 'A';
+                if(type === 'target') cell.innerText = 'T';
+                
+                gridDiv.appendChild(cell);
+            }
+        }
+
+        document.getElementById('term').innerHTML += `<br>> ORIGEM: [${start.x}, ${start.y}] | DESTINO: [${target.x}, ${target.y}]`;
+
+        function getH(x, y) { return Math.sqrt((x-target.x)**2 + (y-target.y)**2); }
+
+        // 1. Busca em Profundidade (DFS - Pior Caminho)
+        function calcularDFS() {
+            let stack = [{x: start.x, y: start.y, path: [], cost: 0}];
+            let visited = new Set();
+            
+            while(stack.length > 0) {
+                let current = stack.pop();
+                if(current.x === target.x && current.y === target.y) return { path: current.path, cost: current.cost };
+
+                let key = `${current.x},${current.y}`;
+                if(visited.has(key)) continue;
+                visited.add(key);
+
+                // Causa caminhos sinuosos e burros de propósito
+                let dirs = [[0,-1],[1,0],[0,1],[-1,0]];
+                for(let [dx, dy] of dirs) {
+                    let nx = current.x + dx, ny = current.y + dy;
+                    if(nx>=0 && nx<size && ny>=0 && ny<size && grid[ny][nx] !== 'wall' && !visited.has(`${nx},${ny}`)) {
+                        let cost = (grid[ny][nx] === 'hazard') ? 5 : 1;
+                        stack.push({ x: nx, y: ny, path: [...current.path, {x: nx, y: ny}], cost: current.cost + cost });
+                    }
+                }
+            }
+            return null;
+        }
+
+        // 2. Busca Gulosa (Greedy - Caminho Mediano)
+        // Só avalia o H(n), ignora o G(n). Fica preso em paredes facilmente.
+        function calcularGulosa() {
+            let openSet = [{x: start.x, y: start.y, path: [], cost: 0, h: getH(start.x, start.y)}];
+            let visited = new Set();
+            
+            while(openSet.length > 0) {
+                openSet.sort((a,b) => a.h - b.h); // A lógica Gulosa aqui!
+                let current = openSet.shift();
+                
+                if(current.x === target.x && current.y === target.y) return { path: current.path, cost: current.cost };
+
+                let key = `${current.x},${current.y}`;
+                if(visited.has(key)) continue;
+                visited.add(key);
+
+                let dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+                for(let [dx, dy] of dirs) {
+                    let nx = current.x + dx, ny = current.y + dy;
+                    if(nx>=0 && nx<size && ny>=0 && ny<size && grid[ny][nx] !== 'wall' && !visited.has(`${nx},${ny}`)) {
+                        let cost = (grid[ny][nx] === 'hazard') ? 5 : ((dx!==0 && dy!==0) ? 1.4 : 1);
+                        openSet.push({ x: nx, y: ny, path: [...current.path, {x: nx, y: ny}], cost: current.cost + cost, h: getH(nx, ny) });
+                    }
+                }
+            }
+            return null;
+        }
+
+        async function iniciar() {
+            document.getElementById('btn-iniciar').disabled = true;
+            document.getElementById('btn-iniciar').style.opacity = '0.5';
+            const term = document.getElementById('term');
+
+            // === DESENHAR DFS (VERMELHO) ===
+            term.innerHTML += "<br>> CALCULANDO DFS (PIOR ROTA)...";
+            let piorCaminho = calcularDFS();
+            if(piorCaminho) {
+                document.getElementById('long-steps').innerText = piorCaminho.path.length;
+                document.getElementById('long-cost').innerText = piorCaminho.cost.toFixed(1);
+                piorCaminho.path.forEach(p => {
+                    let dot = document.createElement('div'); dot.className = 'path-long';
+                    document.getElementById(`c${p.x}-${p.y}`).appendChild(dot);
+                });
+            } else {
+                term.innerHTML += "<br>> ALVO INACESSÍVEL."; return;
+            }
+
+            // === DESENHAR GULOSA (LARANJA) ===
+            term.innerHTML += "<br>> CALCULANDO GULOSA (ROTA MEDIANA)...";
+            let medCaminho = calcularGulosa();
+            if(medCaminho) {
+                document.getElementById('med-steps').innerText = medCaminho.path.length;
+                document.getElementById('med-cost').innerText = medCaminho.cost.toFixed(1);
+                medCaminho.path.forEach(p => {
+                    let dot = document.createElement('div'); dot.className = 'path-med';
+                    document.getElementById(`c${p.x}-${p.y}`).appendChild(dot);
+                });
+            }
+
+            // === DESENHAR A* (VERDE) ===
+            term.innerHTML += "<br>> INICIANDO VARREDURA A* (ÓTIMA)...";
+            let openSet = [{x: start.x, y: start.y, g: 0, h: getH(start.x, start.y), f: getH(start.x, start.y), parent: null}];
+            let closedSet = new Set();
+
+            while(openSet.length > 0) {
+                openSet.sort((a,b) => a.f - b.f);
+                let current = openSet.shift();
+
+                if(current.x === target.x && current.y === target.y) {
+                    term.innerHTML += "<br>> A*: ROTA ÓTIMA ENCONTRADA!";
+                    reconstructAStar(current);
+                    return;
+                }
+
+                closedSet.add(`${current.x},${current.y}`);
+
+                let dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+                for(let [dx, dy] of dirs) {
+                    let nx = current.x + dx, ny = current.y + dy;
+
+                    if(nx>=0 && nx<size && ny>=0 && ny<size && grid[ny][nx] !== 'wall' && !closedSet.has(`${nx},${ny}`)) {
+                        let dist = (dx!==0 && dy!==0) ? 1.4 : 1.0;
+                        let cost = (grid[ny][nx] === 'hazard') ? 5 : 0;
+                        let g = current.g + dist + cost;
+                        let h = getH(nx, ny);
+                        
+                        let neighbor = {x: nx, y: ny, g: g, h: h, f: g+h, parent: current};
+                        let existing = openSet.find(o => o.x === nx && o.y === ny);
+                        
+                        if(!existing) {
+                            openSet.push(neighbor);
+                        } else if (g < existing.g) {
+                            existing.g = g; existing.f = g+h; existing.parent = current;
+                        }
+                    }
+                }
+                await new Promise(r => setTimeout(r, 10)); // Calcula super rápido para mostrar o traço final
+            }
+        }
+
+        function reconstructAStar(node) {
+            let curr = node.parent;
+            let finalCost = node.g;
+            let steps = 0;
+            
+            let interval = setInterval(() => {
+                if(!curr || !curr.parent) { 
+                    clearInterval(interval); 
+                    document.getElementById('short-steps').innerText = steps;
+                    document.getElementById('short-cost').innerText = finalCost.toFixed(1);
+                    document.getElementById('term').innerHTML += "<br>> BENCHMARK CONCLUÍDO.";
+                    return; 
+                }
+                
+                let dot = document.createElement('div'); 
+                dot.className = 'path';
+                document.getElementById(`c${curr.x}-${curr.y}`).appendChild(dot);
+                
+                steps++;
+                curr = curr.parent;
+            }, 40); // Animação do caminho verde a ser desenhado sobre os outros
+        }
+    </script>
+</body>
+</html>
